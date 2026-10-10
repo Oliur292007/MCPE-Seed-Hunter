@@ -5,16 +5,15 @@ import random
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 API_URL = "https://mineseedfinder.vercel.app/scan/bedrock"
-WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 HISTORY_FILE = Path("posted_seeds.txt")
 
-# Supported Bedrock structure IDs:
-# 5 = Village, 11 = Ruined Portal,
-# 14 = Buried Treasure, 24 = Trial Chambers,
-# 13 = Ancient City, 7 = Shipwreck.
+WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
+ROLE_ID = os.environ["MINECRAFT_ROLE_ID"]
+
 STRUCTURES = {
     5: "🏘️ Village",
     11: "🌀 Ruined Portal",
@@ -28,7 +27,11 @@ STRUCTURES = {
 def read_history():
     if not HISTORY_FILE.exists():
         return set()
-    return set(HISTORY_FILE.read_text().splitlines())
+    return {
+        line.strip()
+        for line in HISTORY_FILE.read_text().splitlines()
+        if line.strip()
+    }
 
 
 def scan_seed(seed):
@@ -40,9 +43,10 @@ def scan_seed(seed):
         "max": 40,
         "types": ",".join(map(str, STRUCTURES)),
     })
-    url = f"{API_URL}?{params}"
+
     request = urllib.request.Request(
-        url, headers={"User-Agent": "BedrockSeedHunter/1.0"}
+        f"{API_URL}?{params}",
+        headers={"User-Agent": "BedrockSeedHunter/1.0"},
     )
 
     with urllib.request.urlopen(request, timeout=45) as response:
@@ -55,25 +59,18 @@ def scan_seed(seed):
 
 
 def post_to_discord(message):
-    import json
-    import os
-    import urllib.request
-    import urllib.error
-
-    webhook_url = os.environ["DISCORD_WEBHOOK_URL"]
-
     payload = json.dumps({
-        "content": message,
-        "allowed_mentions": {"parse": []},
+        "content": f"<@&{ROLE_ID}>\n{message}",
+        "allowed_mentions": {
+            "parse": [],
+            "roles": [ROLE_ID],
+        },
     }).encode("utf-8")
 
     request = urllib.request.Request(
-        webhook_url,
+        WEBHOOK_URL,
         data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "DiscordBot (https://github.com/Oliur292007/MCPE-Seed-Hunter, 1.0)"
-        },
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
 
@@ -84,20 +81,19 @@ def post_to_discord(message):
                     f"Discord returned HTTP {response.status}"
                 )
     except urllib.error.HTTPError as exc:
-        # Print the response body, never the secret URL.
         detail = exc.read().decode("utf-8", errors="replace")
-        print(f"Discord webhook HTTP {exc.code}: {detail[:500]}")
+        print(f"Discord HTTP {exc.code}: {detail[:300]}")
         raise RuntimeError(
-            f"Discord webhook failed with HTTP {exc.code}"
+            f"Discord posting failed: HTTP {exc.code}"
         ) from None
+
 
 def main():
     history = read_history()
     best = None
 
-    # Try several candidates and prefer seeds with more nearby
-    # supported structures. This does not verify chest loot.
-    for _ in range(12):
+    # Try unique candidates; never intentionally select a posted seed.
+    for _ in range(30):
         seed = str(random.randint(0, 2**32 - 1))
 
         if seed in history:
@@ -106,23 +102,28 @@ def main():
         try:
             results = scan_seed(seed)
         except Exception as exc:
-            print(f"Scan failed for {seed}: {exc}")
+            print(f"Scan failed for candidate: {exc}")
             time.sleep(2)
             continue
 
-        found_types = {item.get("name", "").lower() for item in results}
-        score = len(found_types)
+        if not results:
+            continue
 
-        # Prefer seeds containing both a village and a ruined portal.
+        found_types = {
+            item.get("name", "").lower().replace(" ", "_")
+            for item in results
+        }
+
+        score = len(found_types)
         if "village" in found_types:
             score += 2
-        if "ruined_portal" in found_types or "ruined portal" in found_types:
+        if "ruined_portal" in found_types:
             score += 2
-        if "buried_treasure" in found_types or "buried treasure" in found_types:
+        if "buried_treasure" in found_types:
             score += 1
 
         candidate = (score, seed, results)
-        if best is None or candidate[0] > best[0]:
+        if best is None or score > best[0]:
             best = candidate
 
         if score >= 5:
@@ -130,49 +131,53 @@ def main():
 
         time.sleep(1)
 
-    if best is None or not best[2]:
+    if best is None:
         raise RuntimeError(
-            "No usable seed was found. The daily workflow can retry tomorrow."
+            "No usable unposted seed found. Will retry at the next schedule."
         )
 
     _, seed, results = best
+
     lines = [
         "🌍 **MINECRAFT BEDROCK — SEED OF THE DAY**",
         "",
         f"🎲 **Seed:** `{seed}`",
         "📱 **Edition:** Minecraft PE / Bedrock",
-        "📍 **Search area:** Up to 100 chunks from spawn",
+        "📍 **Search area:** API-reported structures near spawn",
         "",
         "**Nearby structure predictions:**",
     ]
 
     for item in results[:20]:
-        name = item.get("name", "").lower()
-        label = STRUCTURES.get(
-            next(
-                (key for key, value in STRUCTURES.items()
-                 if value.split(" ", 1)[1].lower() == name),
-                -1
+        name = item.get("name", "Structure").lower().replace(" ", "_")
+        label = next(
+            (
+                label for label in STRUCTURES.values()
+                if label.split(" ", 1)[1].lower().replace(" ", "_") == name
             ),
-            f"📌 {item.get('name', 'Structure').replace('_', ' ').title()}",
+            f"📌 {name.replace('_', ' ').title()}",
         )
-        lines.append(
-            f"• {label} — X: `{item['x']}`, Z: `{item['z']}`"
-        )
+
+        if "x" in item and "z" in item:
+            lines.append(
+                f"• {label} — X: `{item['x']}`, Z: `{item['z']}`"
+            )
 
     lines += [
         "",
         "🗺️ [Open Bedrock Seed Map](https://www.chunkbase.com/apps/seed-map)",
-        "ℹ️ Coordinates are predictions. Chest loot and exact game-version "
-        "compatibility are not verified by this bot.",
+        "ℹ️ Structure predictions and chest loot have not been independently verified.",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "🤖 *Automatically selected by Bedrock Seed Hunter*",
     ]
 
+    # Post first; save history only after the post succeeds.
     post_to_discord("\n".join(lines))
-    HISTORY_FILE.write_text("".join(sorted(history | {seed})) + "\n")
-    print(f"Posted seed {seed} successfully.")
+
+    history.add(seed)
+    HISTORY_FILE.write_text("\n".join(sorted(history)) + "\n")
+    print(f"Posted new seed {seed} successfully.")
 
 
 if __name__ == "__main__":
