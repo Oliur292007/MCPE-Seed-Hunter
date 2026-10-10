@@ -3,7 +3,7 @@ name: Daily MCPE/Bedrock Seed Hunter
 
 on:
   schedule:
-    - cron: "0 3 * * *"
+    - cron: "17 */4 * * *"
   workflow_dispatch:
 
 permissions:
