@@ -3,7 +3,6 @@ name: Daily MCPE/Bedrock Seed Hunter
 
 on:
   schedule:
-    # Every day at 03:00 UTC = 09:00 Bangladesh time
     - cron: "0 3 * * *"
   workflow_dispatch:
 
