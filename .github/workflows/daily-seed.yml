@@ -30,6 +30,7 @@ jobs:
       - name: Publish daily seed
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          MINECRAFT_ROLE_ID: ${{ secrets.MINECRAFT_ROLE_ID }}
         run: python seed_bot.py
 
       - name: Save posted seed history
