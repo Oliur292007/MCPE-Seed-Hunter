@@ -70,7 +70,10 @@ def post_to_discord(message):
     request = urllib.request.Request(
         WEBHOOK_URL,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0",
+        },
         method="POST",
     )
 
