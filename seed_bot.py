@@ -139,7 +139,7 @@ def main():
     _, seed, results = best
 
     lines = [
-        "🌍 **MINECRAFT BEDROCK — SEED OF THE DAY**",
+        "🌍 **MINECRAFT BEDROCK — SEED OF THE HOUR..!**",
         "",
         f"🎲 **Seed:** `{seed}`",
         "📱 **Edition:** Minecraft PE / Bedrock",
