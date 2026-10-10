@@ -55,22 +55,38 @@ def scan_seed(seed):
 
 
 def post_to_discord(message):
+    import json
+    import os
+    import urllib.request
+    import urllib.error
+
+    webhook_url = os.environ["DISCORD_WEBHOOK_URL"]
+
     payload = json.dumps({
         "content": message,
         "allowed_mentions": {"parse": []},
     }).encode("utf-8")
 
     request = urllib.request.Request(
-        WEBHOOK_URL,
+        webhook_url,
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        if response.status not in (200, 204):
-            raise RuntimeError(f"Discord returned HTTP {response.status}")
-
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status not in (200, 204):
+                raise RuntimeError(
+                    f"Discord returned HTTP {response.status}"
+                )
+    except urllib.error.HTTPError as exc:
+        # Print the response body, never the secret URL.
+        detail = exc.read().decode("utf-8", errors="replace")
+        print(f"Discord webhook HTTP {exc.code}: {detail[:500]}")
+        raise RuntimeError(
+            f"Discord webhook failed with HTTP {exc.code}"
+        ) from None
 
 def main():
     history = read_history()
