@@ -1,0 +1,44 @@
+
+name: Daily MCPE/Bedrock Seed Hunter
+
+on:
+  schedule:
+    # Every day at 03:00 UTC = 09:00 Bangladesh time
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-bedrock-seed
+  cancel-in-progress: false
+
+jobs:
+  post-seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Get repository files
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Publish daily seed
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python seed_bot.py
+
+      - name: Save posted seed history
+        run: |
+          if [ -n "$(git status --porcelain -- posted_seeds.txt)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add posted_seeds.txt
+            git commit -m "Update posted seed history"
+            git push
+          fi
