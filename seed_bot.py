@@ -12,7 +12,6 @@ API_URL = "https://mineseedfinder.vercel.app/scan/bedrock"
 HISTORY_FILE = Path("posted_seeds.txt")
 
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
-ROLE_ID = os.environ["MINECRAFT_ROLE_ID"]
 
 STRUCTURES = {
     5: "🏘️ Village",
@@ -27,6 +26,7 @@ STRUCTURES = {
 def read_history():
     if not HISTORY_FILE.exists():
         return set()
+
     return {
         line.strip()
         for line in HISTORY_FILE.read_text().splitlines()
@@ -60,10 +60,9 @@ def scan_seed(seed):
 
 def post_to_discord(message):
     payload = json.dumps({
-        "content": f"<@&{ROLE_ID}>\n{message}",
+        "content": message,
         "allowed_mentions": {
             "parse": [],
-            "roles": [ROLE_ID],
         },
     }).encode("utf-8")
 
@@ -83,6 +82,7 @@ def post_to_discord(message):
                 raise RuntimeError(
                     f"Discord returned HTTP {response.status}"
                 )
+
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         print(f"Discord HTTP {exc.code}: {detail[:300]}")
@@ -118,6 +118,7 @@ def main():
         }
 
         score = len(found_types)
+
         if "village" in found_types:
             score += 2
         if "ruined_portal" in found_types:
@@ -126,6 +127,7 @@ def main():
             score += 1
 
         candidate = (score, seed, results)
+
         if best is None or score > best[0]:
             best = candidate
 
@@ -153,6 +155,7 @@ def main():
 
     for item in results[:20]:
         name = item.get("name", "Structure").lower().replace(" ", "_")
+
         label = next(
             (
                 label for label in STRUCTURES.values()
@@ -180,6 +183,7 @@ def main():
 
     history.add(seed)
     HISTORY_FILE.write_text("\n".join(sorted(history)) + "\n")
+
     print(f"Posted new seed {seed} successfully.")
 
 
